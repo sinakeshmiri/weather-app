@@ -3,7 +3,7 @@ const http = require('http');
 const url = require('url');
 const MongoClient = require('mongodb').MongoClient;
 
-const uri = 'mongodb://localhost:27017'; // Replace with your MongoDB connection URI
+const uri = 'mongodb://mongo:27017'; // Replace with your MongoDB connection URI
 const dbName = 'weather_db'; // Replace with your database name
 const collectionName = 'weather_collection'; // Replace with your collection name
 

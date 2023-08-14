@@ -9,7 +9,7 @@
    function search_city(event) {
     let apikey ="3679755b1ebb6cd9b2cd32048242a186";
     let name_city =document.querySelector('input').value;
-    let apiurl=`https://api.openweathermap.org/data/2.5/weather?q=${name_city}&appid=${apikey}&units=metric`;
+    let apiurl=`http://weather.local/api/?q=${name_city}`;
     axios.get(apiurl).then(displaywheather)
    }
    function search_current(position) {
