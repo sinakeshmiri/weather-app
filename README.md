@@ -1,2 +1,4 @@
-# plus-f-w2
+# weather-app
+
+simple weather application using node 
  
