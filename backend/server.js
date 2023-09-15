@@ -1,98 +1,118 @@
-const axios = require("axios");
 const http = require('http');
 const url = require('url');
-const MongoClient = require('mongodb').MongoClient;
+const { MongoClient } = require('mongodb');
+const axios = require('axios');
 
-const uri = 'mongodb://mongo:27017'; // Replace with your MongoDB connection URI
+const uri = 'mongodb://localhost:27017'; // Replace with your MongoDB connection URI
 const dbName = 'weather_db'; // Replace with your database name
 const collectionName = 'weather_collection'; // Replace with your collection name
 
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
-function areDatesEqual(dateString) {
-    const currentDate = new Date();
-    const inputDate = new Date(dateString);
-  
-    // Compare year, month, and day of both dates
-    return (
-      currentDate.getFullYear() === inputDate.getFullYear() &&
-      currentDate.getMonth() === inputDate.getMonth() &&
-      currentDate.getDate() === inputDate.getDate()
-    );
-  }
-  
+
 const getData = async (cityName) => {
-    const apiUrl = `https://api.openweathermap.org/data/2.5/weather`;
+    const apiUrl = 'https://api.openweathermap.org/data/2.5/weather';
     try {
         const response = await axios.get(apiUrl, {
             params: {
                 q: cityName,
-                appid: '3679755b1ebb6cd9b2cd32048242a186',
+                appid: '3679755b1ebb6cd9b2cd32048242a186', // Replace with your OpenWeather API key
                 units: 'metric'
             }
         });
-
         return response.data;
     } catch (error) {
-        console.log(error);
+        console.error('Error fetching weather data:', error);
         throw error;
     }
 };
 
-// Create an HTTP server
 const server = http.createServer(async (req, res) => {
-    // Parse the URL and query parameters
-    const parsedUrl = url.parse(req.url, true);
-    let cityName = parsedUrl.query.q;
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    try {
-        await client.connect();
+    console.log(req.url);
 
-        // Check if the data is in the database
-        const db = client.db(dbName);
-        const collection = db.collection(collectionName);
+    if (req.method === 'POST') {
+        let requestBody = '';
 
-        cityName = cityName[0].toUpperCase() + cityName.slice(1)
-        //console.log(cityName)
-        const query = { name: cityName };
+        req.on('data', (chunk) => {
+            requestBody += chunk.toString();
+        });
 
-        const result = await collection.findOne(query);
-        
-        console.log(result);
-        if (result && areDatesEqual(result.timestamp)) {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(result));  
-        }else {
-            await collection.deleteOne(query);
+        req.on('end', async () => {
+            try {
+                const requestData = JSON.parse(requestBody);
 
-            // Get weather data using the cityName
-            const weatherData = await getData(cityName);
-            if (weatherData.cod == '200') {
-                // Insert data into the database
-                weatherData.timestamp = new Date();
-                const result = await collection.insertOne(weatherData);
-                console.log('Data inserted:', result.insertedCount);
-
-                // Respond with weather data
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify(weatherData));
-            } else {
+                if (req.url === '/admin') {
+                    if (requestData.user === 'admin' && requestData.pass === 'admin') {
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: true }));
+                    } else {
+                        throw new Error('Invalid credentials');
+                    }
+                } else {
+                    throw new Error('Unknown endpoint');
+                }
+            } catch (error) {
+                console.error('Error processing POST request:', error);
                 res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ "error": "city not found" }));
+                res.end(JSON.stringify({ error: 'Invalid JSON data' }));
             }
+        });
+    } else if (req.method === 'GET') {
+        const parsedUrl = url.parse(req.url, true);
+        const cityName = parsedUrl.query.q;
+
+        if (cityName) {
+            try {
+                await client.connect();
+
+                const db = client.db(dbName);
+                const collection = db.collection(collectionName);
+
+                const query = { name: cityName };
+
+                const result = await collection.findOne(query);
+
+                if (result) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify(result));
+                } else {
+                    console.log('City data not found in the database');
+
+                    const weatherData = await getData(cityName);
+
+                    if (weatherData.cod === 200) {
+                        const insertResult = await collection.insertOne(weatherData);
+                        console.log('Data inserted:', insertResult.insertedCount);
+
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify(weatherData));
+                    } else {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: 'City not found' }));
+                    }
+                }
+            } catch (error) {
+                console.error('Error processing GET request:', error);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Something went wrong' }));
+            } finally {
+                client.close();
+            }
+        } else {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing city name in the query parameters' }));
         }
-    } catch (error) {
-        // console.log(error);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ "error": "something went wrong" }));
-    } finally {
-        await client.close();
+    } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not Found' }));
     }
 });
 
-// Define the server port
-const port = 3000; // You can change this to any port you prefer
+const port = 3000;
 
-// Start the server
 server.listen(port, () => {
     console.log(`Server is running on port ${port}`);
 });
