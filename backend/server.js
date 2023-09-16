@@ -2,6 +2,9 @@ const http = require('http');
 const url = require('url');
 const { MongoClient } = require('mongodb');
 const axios = require('axios');
+const { v4: uuidv4 } = require('uuid');
+
+
 
 const uri = 'mongodb://localhost:27017'; // Replace with your MongoDB connection URI
 const dbName = 'weather_db'; // Replace with your database name
@@ -9,6 +12,9 @@ const collectionName = 'weather_collection'; // Replace with your collection nam
 
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
 
+let cookies = [];
+let theme = "";
+let font = "";
 const getData = async (cityName) => {
     const apiUrl = 'https://api.openweathermap.org/data/2.5/weather';
     try {
@@ -44,14 +50,36 @@ const server = http.createServer(async (req, res) => {
             try {
                 const requestData = JSON.parse(requestBody);
 
-                if (req.url === '/admin') {
+                if (req.url === '/api/login') {
                     if (requestData.user === 'admin' && requestData.pass === 'admin') {
+                        const randomUuid = uuidv4();
+                        let cookie=randomUuid;
+                        cookies.push(cookie)
+                        console.log(cookies)
+                        res.setHeader('Set-Cookie', `${cookie}; Path=/; Max-Age=3600`); // Adjust the Max-Age value as needed
                         res.writeHead(200, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({ success: true }));
                     } else {
                         throw new Error('Invalid credentials');
                     }
-                } else {
+                }else if(req.url === '/api/logout'){ 
+                    const cookie = req.headers['Cookie'];
+                    cookies = cookies.filter(item => item !== cookie);
+                }else if(req.url === '/api/set'){
+                    const cookie = req.headers['cookie'];
+                    console.log(req.headers);
+                    if(cookies.includes(cookie)){
+                        console.log("FFF");
+                        theme=requestData.theme;
+                        font =requestData.font;
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: true }));
+                    }else{
+                        res.writeHead(403, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: false }));
+                    }
+                
+                }else {
                     throw new Error('Unknown endpoint');
                 }
             } catch (error) {
@@ -63,8 +91,11 @@ const server = http.createServer(async (req, res) => {
     } else if (req.method === 'GET') {
         const parsedUrl = url.parse(req.url, true);
         const cityName = parsedUrl.query.q;
-
-        if (cityName) {
+        if(req.url === '/api/get'){
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ "theme": theme , "font": font }));
+        }
+        else if (cityName) {
             try {
                 await client.connect();
 
